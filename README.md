@@ -83,6 +83,18 @@ actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod
 
 1. The venue logs into the **ConcieraHQ Admin Portal**, opens **Settings → Integrations**, and
    clicks **Connect** on the Lightspeed Hospitality K-Series card.
+
+
+
+<p align="center">
+  <img src="./assets/diagrams/ConcieraHQ-Admin-Integrations-Lightspeed-Connect.png" alt="ConcieraHQ Admin Portal Lightspeed integration connect" width="100%">
+</p>
+
+<p align="center">
+  <img src="./assets/diagrams/ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png" alt="ConcieraHQ Admin Portal Lightspeed integration connect to K-Series" width="100%">
+</p>
+
+
 2. The portal sends a `POST` to the service-account endpoint **`{SERVICE-ACCOUNT-URL}/initiation`**
    with the tenant routing context:
 
