@@ -83,7 +83,7 @@ actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod
 
 1. The venue logs into the **ConcieraHQ Admin Portal**, opens **Settings → Integrations**, and
    clicks **Connect** on the Lightspeed Hospitality K-Series card.
-2. The portal sends a `POST` to the service-account endpoint **`auth.concierahq.io/initiation`**
+2. The portal sends a `POST` to the service-account endpoint **`{SERVICE-ACCOUNT-URL}/initiation`**
    with the tenant routing context:
 
    ```json
@@ -118,7 +118,7 @@ actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod
 ### Phase 2 — Callback & token exchange
 
 5. The venue signs in to Lightspeed and approves the requested permissions. Lightspeed redirects
-   back to the registered **Redirect URI** at **`auth.xxxxxx.xx/lsk`** with `code` and `state`
+   back to the registered **Redirect URI** at **`{SERVICE-ACCOUNT-URL}/lsk`** with `code` and `state`
    query parameters.
 6. The **`handle-oauth-callback`** Lambda (`StateManager`) decodes `state`, extracts the nonce, and
    looks up `PKCE#{nonce}` in `PKCE_Table` to recover `tenant_id`, `aws_account_id` and `region`.
@@ -250,12 +250,12 @@ ttl            = now + 600s         # bounds the flow window
 | Component | AWS service | Account | Role in the flow |
 | --- | --- | --- | --- |
 | ConcieraHQ Admin Portal | Amplify | Tenant | Venue-facing UI that starts the connection |
-| `xxxxxxx/initiation` | API Gateway | Service | Entry point for the authorization request |
+| `{SERVICE-ACCOUNT-URL}/initiation` | API Gateway | Service | Entry point for the authorization request |
 | API Authoriser | Lambda | Service | Authorises inbound initiation requests |
 | `handle-oauth-initation` | Lambda | Service | Mints nonce, stores routing ctx, builds auth URL |
 | `PKCE_Table` | DynamoDB | Service | Nonce → routing-context store (name is historical) |
 | Secure Storage Client ID/Secret | Secrets Manager | Service | Holds the OAuth client credentials |
-| `xxxxxxx/lsk` | API Gateway | Service | OAuth **Redirect URI** callback endpoint |
+| `{SERVICE-ACCOUNT-URL}/lsk` | API Gateway | Service | OAuth **Redirect URI** callback endpoint |
 | `handle-oauth-callback` | Lambda | Service | Validates state, exchanges code for tokens |
 | Tenant Access Permissions | IAM | Service | Cross-account access into the tenant token store |
 | Access &amp; Refresh Token storage | DynamoDB | Tenant | Persists per-tenant access/refresh tokens |
