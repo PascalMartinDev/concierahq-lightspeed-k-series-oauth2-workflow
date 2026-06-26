@@ -85,16 +85,6 @@ actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod
    clicks **Connect** on the Lightspeed Hospitality K-Series card.
 
 
-
-<p align="center">
-  <img src="./assets/diagrams/ConcieraHQ-Admin-Integrations-Lightspeed-Connect.png" alt="ConcieraHQ Admin Portal Lightspeed integration connect" width="100%">
-</p>
-
-<p align="center">
-  <img src="./assets/diagrams/ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png" alt="ConcieraHQ Admin Portal Lightspeed integration connect to K-Series" width="100%">
-</p>
-
-
 2. The portal sends a `POST` to the service-account endpoint **`{SERVICE-ACCOUNT-URL}/initiation`**
    with the tenant routing context:
 
@@ -285,7 +275,7 @@ The whole handshake is two clicks for the venue.
 Lightspeed Hospitality K-Series card.
 
 <p align="center">
-  <img src="./assets/diagrams/ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png" alt="ConcieraHQ Integrations page with Lightspeed K-Series Connect button" width="100%">
+  <img src="./assets/diagrams/ConcieraHQ-Admin-Integrations-Lightspeed-Connect.png" alt="ConcieraHQ Integrations page with Lightspeed K-Series Connect button" width="100%">
 </p>
 
 **2. Connect screen** — ConcieraHQ explains what will happen, then **Authorise Lightspeed** kicks off
@@ -296,7 +286,13 @@ and is redirected straight back — connected automatically.
   <img src="./assets/diagrams/ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png" alt="Connect ConcieraHQ to Lightspeed K-Series screen" width="100%">
 </p>
 
-A venue can disconnect at any time from the Integrations settings page.
+**3. Confirmation screen** — Upon either success or failure the tenant client will see a confirmation message. 
+
+<p align="center">
+  <img src="./assets/diagrams/ConcieraHQ-Admin-Integration-Lightspeed-Connection-Successful.png" alt="Successfully connected ConcieraHQ to Lightspeed K-Series screen" width="100%">
+</p>
+
+
 
 ---
 
@@ -327,15 +323,14 @@ A venue can disconnect at any time from the Integrations settings page.
 ```
 .
 ├── README.md
-├── assets
-│   ├── diagrams
-│   │   ├── architecture.png            # AWS architecture diagram
-│   │   └── oauth2-workflow.lucid.json  # Lucidchart source for the diagram
-│   └── screenshots
-│       ├── 01-integrations.png         # Integrations page (Connect)
-│       └── 02-connect.png              # Authorise Lightspeed screen
-└── docs
-    └── Lightspeed-ConcieraHQ-Value-Proposition.pdf           # Why Lightspeed + ConcieraHQ
+└── assets
+    ├── diagrams
+    │   ├── ConcieraHQ-KSeries-Integration-Architecture.png              # AWS architecture diagram
+    │   ├── ConcieraHQ-Admin-Integrations-Lightspeed-Connect.png         # Integrations page (Connect)
+    │   ├── ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png   # Authorise Lightspeed screen
+    │   └── ConcieraHQ-Admin-Integration-Lightspeed-Connection-Successful.png # Connection confirmation screen
+    └── docs
+        └── Lightspeed-ConcieraHQ-Value-Proposition.pdf                  # Why Lightspeed + ConcieraHQ
 ```
 
 ---
@@ -347,7 +342,7 @@ Environment variables consumed by the service-account Lambdas:
 | Key | Description |
 | --- | --- |
 | `PKCE_TABLE` | DynamoDB table storing nonce → routing-context records |
-| `REDIRECT_URI` | OAuth redirect URI registered with Lightspeed (`https://auth.concierahq.io/lsk`) |
+| `REDIRECT_URI` | OAuth redirect URI registered with Lightspeed (`https://{SERVICE-ACCOUNT-URL}/lsk`) |
 | `LSK_SCOPES` | Comma-separated OAuth scopes, e.g. `financial-api,orders-api,items,offline-access` |
 | `LSK_APP_STAGE` | Lightspeed environment slug — `demo` or `prod` — embedded in the auth/token host |
 
