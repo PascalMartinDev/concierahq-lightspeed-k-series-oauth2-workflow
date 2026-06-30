@@ -1,4 +1,4 @@
-# ConcieraHQ × Lightspeed K-Series — OAuth2 Integration
+# ConcieraHQ × Lightspeed K-Series — Integration Documentation
 
 > **Lightspeed powers the transaction. ConcieraHQ powers the relationship.**
 
