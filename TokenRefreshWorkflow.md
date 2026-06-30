@@ -1,5 +1,10 @@
 # ConcieraHQ Lightspeed K-Series — OAuth2 Access Token Refresh Workflow
 
+> This is **workflow 2 of 3** in the Lightspeed K-Series integration. See the
+> [project README](./README.md) for the big picture. It runs after the
+> [Authorization Code Workflow](./AuthorizationCodeWorkflow.md) hands tokens off to the tenant
+> account, and keeps the token valid for the [Create Customer in POS](./PosAddCustomer.md) workflow.
+
 This document describes the automated workflow ConcieraHQ uses to maintain valid OAuth2
 credentials for the **Lightspeed K-Series** integration. It is provided to support the
 application review process for production OAuth2 credentials and is intended to demonstrate
@@ -13,11 +18,12 @@ how access and refresh tokens are stored, rotated, and protected throughout thei
 
 ## Overview
 
-After a venue completes the initial Authorization Code grant and ConcieraHQ receives its
-first access/refresh token pair from Lightspeed, those credentials must be kept current for
-the integration to continue syncing data. Lightspeed access tokens are short-lived, so
-ConcieraHQ runs a scheduled, fully automated refresh process that exchanges the stored
-refresh token for a new token pair **ahead of expiry** — without any user interaction.
+After a venue completes the initial
+[Authorization Code grant](./AuthorizationCodeWorkflow.md) and the first access/refresh token pair
+is handed off into the venue's own AWS account, those credentials must be kept current for the
+integration to continue syncing data. Lightspeed access tokens are short-lived, so each tenant
+account runs a scheduled, fully automated refresh process that exchanges the stored refresh token
+for a new token pair **ahead of expiry** — without any user interaction.
 
 The refresh process is implemented as an **AWS Step Functions** state machine, triggered on
 a fixed schedule by **Amazon EventBridge Scheduler**. The workflow is self-healing on
@@ -161,12 +167,13 @@ history.
 
 ### Credential handling
 
-The function authenticates as a **confidential client**. The `client_id` / `client_secret`
-are held in **AWS Secrets Manager** within the ConcieraHQ service account and are injected
-into the request as cached authorization headers at call time. These credentials are **never
-stored in, or accessible from, any tenant account** — the venue never sees or holds the
-application's client secret. Header construction is isolated in a dedicated `Headers`
-component so the secret is read once and reused, rather than embedded in application logic.
+The function authenticates as a **confidential client**. The `client_id` / `client_secret` are
+held in **AWS Secrets Manager within the dedicated Lightspeed service account** — the single place
+they are ever stored. The tenant account's refresh function reads them **cross-account** at call
+time and injects them as cached authorization headers; the secret is never persisted in the tenant
+account, never exposed to the venue or any client-facing surface, and never appears in code, logs,
+or execution payloads. Header construction is isolated in a dedicated `Headers` component so the
+secret is read once and reused, rather than embedded in application logic.
 
 ### Retry and backoff
 
@@ -228,8 +235,7 @@ token material — are never logged, keeping CloudWatch diagnostics free of cred
 | Client ID / client secret | AWS Secrets Manager (not handled by this workflow) |
 
 Tokens are never returned to, or rendered in, any end-user-facing surface. They exist only
-within the ConcieraHQ service account's data stores and are read solely by server-side
-components.
+within the venue's own AWS account data stores and are read solely by server-side components.
 
 ---
 
@@ -255,17 +261,17 @@ components.
 ## Security considerations relevant to verification
 
 - **Confidential client** — the integration authenticates to Lightspeed as a confidential
-  client. The `client_id` / `client_secret` are held in AWS Secrets Manager **within the
-  ConcieraHQ service account**, injected as cached authorization headers at request time, and
-  are never stored in or accessible from any tenant account, code, logs, or execution
-  payloads.
+  client. The `client_id` / `client_secret` are stored only in AWS Secrets Manager in the dedicated
+  Lightspeed service account and read **cross-account** by the tenant account at request time; they
+  are never persisted in the tenant account, exposed to the venue or any client-facing surface, nor
+  written to code, logs, or execution payloads.
 - **No secrets in transit URLs** — grant parameters are sent in a form-urlencoded request
   body, never in URLs or query strings.
 - **Refresh token rotation** — refresh tokens are single-use and replaced on every cycle.
 - **Least-data execution** — only the values strictly required at each step are carried in
   the state machine payload (e.g. the registry read returns the refresh token alone).
-- **Server-side only** — the entire refresh lifecycle runs inside the ConcieraHQ service
-  account; no token material crosses into tenant-facing or browser contexts.
+- **Server-side only** — the entire refresh lifecycle runs inside the venue's own AWS account;
+  no token material crosses into tenant-facing or browser contexts.
 - **Diagnostics isolation** — detailed execution diagnostics are routed to CloudWatch;
   user-facing surfaces show only generic status.
 - **Encryption at rest** — token material is stored in DynamoDB and benefits from encryption

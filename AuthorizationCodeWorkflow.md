@@ -2,7 +2,13 @@
 
 > **Lightspeed powers the transaction. ConcieraHQ powers the relationship.**
 
-This repository documents the **OAuth 2.0 Authorization Code flow** that connects a hospitality
+> This is **workflow 1 of 3** in the Lightspeed K-Series integration. See the
+> [project README](./README.md) for the big picture, and the
+> [Access Token Refresh](./TokenRefreshWorkflow.md) and
+> [Create Customer in POS](./PosAddCustomer.md) workflows for what happens once this handshake
+> hands tokens off to the tenant account.
+
+This document describes the **OAuth 2.0 Authorization Code flow** that connects a hospitality
 venue's **Lightspeed Hospitality K-Series** account to **ConcieraHQ**, so that customer profiles,
 orders, items and other performance metrics can be securely synced into ConcieraHQ's
 customer-intelligence platform.
@@ -40,7 +46,6 @@ OAuth handshake and holds the client credentials.
 - [AWS components](#aws-components)
 - [User experience](#user-experience)
 - [Security model](#security-model)
-- [Repository structure](#repository-structure)
 - [Configuration](#configuration)
 - [Support](#support)
 
@@ -48,32 +53,31 @@ OAuth handshake and holds the client credentials.
 
 ## Overview
 
-Lightspeed delivers the operational foundation hospitality businesses rely on every day. ConcieraHQ
-extends that value by transforming transactional data into actionable customer intelligence —
-deeper insight into customer behaviours, preferences and purchasing patterns that lets venues
-deliver more personalised experiences, strengthen loyalty and unlock new revenue.
-
-To do that safely, ConcieraHQ never asks a venue for its Lightspeed password. The venue authorises
+To connect a venue safely, ConcieraHQ never asks for its Lightspeed password. The venue authorises
 access from inside their own Lightspeed back office, and ConcieraHQ only ever holds short-lived,
-revocable tokens scoped to the permissions the venue approved.
+revocable tokens scoped to the permissions the venue approved. This authorization handshake is
+brokered centrally and, on success, hands those tokens **cross-account** to the venue's own AWS
+account — where the [refresh](./TokenRefreshWorkflow.md) and [POS-sync](./PosAddCustomer.md)
+workflows take over. See the [project README](./README.md#overview) for the wider value proposition.
 
 ---
 
 ## Architecture at a glance
 
-The system spans **two isolated AWS accounts** plus the external **Lightspeed K-Series**
-authorization server (a Keycloak-style OpenID Connect provider at
-`auth.lsk-{stage}.app/realms/k-series`):
+This handshake spans the hardened **service account**, the venue's **own tenant AWS account**, and
+the external **Lightspeed K-Series** authorization server (a Keycloak-style OpenID Connect provider
+at `auth.lsk-{stage}.app/realms/k-series`):
 
-| Boundary | Responsibility |
+| Boundary | Role in this workflow |
 | --- | --- |
-| **ConcieraHQ Application — Tenant Account** | The venue-facing Admin Portal, long-term token storage, and the tenant's own token-refresh machinery. |
 | **ConcieraHQ Service Account — Lightspeed K-Series** | The OAuth broker: API endpoints, initiation/callback Lambdas, nonce/routing state, and client-secret storage. |
+| **ConcieraHQ Application — Tenant Account** *(one per venue)* | Starts the connection from the Admin Portal and receives the tokens; afterwards owns long-term token storage and the venue's own refresh machinery. |
 | **Lightspeed K-Series (Tenant Back office)** | The external authorization & token server where the venue grants access. |
 
-The split keeps the OAuth **client secret** and the live handshake inside a hardened service
-account, while per-tenant tokens are written **cross-account** into the application account that
-actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod`** (production).
+The split keeps the OAuth **client secret** and the live handshake inside the hardened service
+account, while the resulting per-tenant tokens are written **cross-account** into the venue's own
+account that consumes them. `stage` is either **`demo`** (trial accounts) or **`prod`**
+(production). The full project architecture is in the [README](./README.md#architecture-at-a-glance).
 
 ---
 
@@ -142,12 +146,14 @@ actually consumes them. `stage` is either **`demo`** (trial accounts) or **`prod
 
 ### Phase 3 — Token storage & scheduled refresh
 
-10. An **EventBridge Scheduler** in the tenant account triggers the **`AccessToken Refresh`**
-    Step Functions workflow on a schedule — refreshing the access token roughly **every 23
-    minutes** so the connection stays live with no further action from the venue.
-11. The workflow's **Token Refresh** Lambda reads the current refresh token from token storage
-    (`Access/Update`), calls Lightspeed's `/token` endpoint with the refresh grant, and writes the
-    rotated tokens back. The **tenant app runs its own token-refresh process** on top of this.
+10. Once the tokens land in the tenant account, that account's own **EventBridge Scheduler** arms
+    a Step Functions workflow that rotates the access token roughly **every 23 minutes**, so the
+    connection stays live with no further action from the venue.
+
+This refresh lifecycle runs entirely inside the venue's own account and is documented separately in
+the **[Access Token Refresh Workflow](./TokenRefreshWorkflow.md)**. From there, the
+**[Create Customer in POS Workflow](./PosAddCustomer.md)** shows how the kept-valid token is used to
+write data into Lightspeed.
 
 ### Failure handling
 
@@ -303,9 +309,11 @@ and is redirected straight back — connected automatically.
 - **Opaque single-use nonce** — the routing context stays server-side and never leaks via the URL,
   browser history or referer; consuming the nonce on success gives CSRF/replay protection.
 - **Client secret isolation** — `client_id`/`client_secret` live only in **Secrets Manager** in the
-  hardened service account, never in code or in the tenant account.
-- **Account separation** — the live OAuth handshake (service account) is isolated from long-term
-  token storage and consumption (tenant account); tokens move via secure cross-account access.
+  single dedicated Lightspeed service account, never in code. Tenant accounts that later refresh the
+  token read the secret via **cross-account access** at call time and never persist their own copy.
+- **Account separation** — the live OAuth handshake (one shared service account) is isolated from
+  long-term token storage and consumption (each venue's own tenant account); tokens move via secure
+  cross-account access.
 - **Bounded flow window** — nonce records carry a 600 s TTL, validated explicitly on callback
   because DynamoDB TTL deletion is best-effort and can lag.
 - **No state in logs** — the full auth URL is never logged, keeping `state` out of CloudWatch.
@@ -318,26 +326,9 @@ and is redirected straight back — connected automatically.
 
 ---
 
-## Repository structure
-
-```
-.
-├── README.md
-└── assets
-    ├── diagrams
-    │   ├── ConcieraHQ-KSeries-Integration-Architecture.png              # AWS architecture diagram
-    │   ├── ConcieraHQ-Admin-Integrations-Lightspeed-Connect.png         # Integrations page (Connect)
-    │   ├── ConcieraHQ-Admin-Integration-Lightspeed-Connect-To-K-Series.png   # Authorise Lightspeed screen
-    │   └── ConcieraHQ-Admin-Integration-Lightspeed-Connection-Successful.png # Connection confirmation screen
-    └── docs
-        └── Lightspeed-ConcieraHQ-Value-Proposition.pdf                  # Why Lightspeed + ConcieraHQ
-```
-
----
-
 ## Configuration
 
-Environment variables consumed by the service-account Lambdas:
+Environment variables consumed by the service-account Lambdas in this workflow:
 
 | Key | Description |
 | --- | --- |
@@ -346,15 +337,10 @@ Environment variables consumed by the service-account Lambdas:
 | `LSK_SCOPES` | Comma-separated OAuth scopes, e.g. `financial-api,orders-api,items,offline-access` |
 | `LSK_APP_STAGE` | Lightspeed environment slug — `demo` or `prod` — embedded in the auth/token host |
 
-Derived endpoints (`auth.lsk-{LSK_APP_STAGE}.app/realms/k-series/protocol/openid-connect/{auth,token}`):
-
-| `LSK_APP_STAGE` | Host |
-| --- | --- |
-| `demo` | `https://auth.lsk-demo.app/...` (trial accounts) |
-| `prod` | `https://auth.lsk-prod.app/...` (production accounts) |
-
-The Lightspeed **`client_id` / `client_secret`** are **not** environment variables — they are read
-at runtime from **Secrets Manager**, with `LSK_APP_STAGE` selecting the demo vs prod credential set.
+The `LSK_APP_STAGE` → host mapping is shared across all three workflows and is documented in the
+[README](./README.md#environments). The Lightspeed **`client_id` / `client_secret`** are **not**
+environment variables — they are read at runtime from **Secrets Manager**, with `LSK_APP_STAGE`
+selecting the demo vs prod credential set.
 
 ---
 
